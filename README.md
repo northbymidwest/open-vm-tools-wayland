@@ -1,7 +1,7 @@
 # open-vm-tools-wayland
 
-A patch that gives open-vm-tools' `vmware-user` native Wayland drag and drop
-and copy/paste, with a Nix flake and NixOS module to use it.
+Patches that give open-vm-tools' `vmware-user` native Wayland drag and drop
+and copy/paste, with a Nix flake and NixOS module to use them.
 
 Upstream open-vm-tools drags and copies through Xwayland on a Wayland
 session, which depends on the compositor carrying drags and the clipboard
@@ -11,9 +11,27 @@ the host never drop, and copying from the guest to the host does nothing.
 VMware's own position is that drag and drop and copy/paste don't work on
 Wayland.
 
-With the patch, `vmware-user`'s `dndcp` plugin talks to the compositor
+With the patches, `vmware-user`'s `dndcp` plugin talks to the compositor
 directly where the compositor supports it, and falls back to the existing
 X11 code everywhere else.
+
+## The patches
+
+Applied in order to open-vm-tools' `stable-13.1.0` tag, relative to its
+`open-vm-tools/` directory:
+
+1. `0001-dndcp-add-Wayland-build-support-and-shared-helpers.patch`:
+   `--with-wayland`, the Wayland protocol XML and generated code, and
+   helpers both backends share. These include validation of the file names
+   in the host's file lists, which are refused as a whole if any name is
+   absolute, has an empty, `.` or `..` component, or contains control
+   characters.
+2. `0002-dndcp-add-native-Wayland-drag-and-drop.patch`: the native Wayland
+   drag and drop backend.
+3. `0003-dndcp-add-native-Wayland-copy-paste.patch`: the native Wayland
+   copy/paste backend.
+
+Each one builds on its own with the ones before it.
 
 ## What works
 
@@ -55,8 +73,8 @@ wayland-info | grep -E 'layer_shell|data_device_manager|viewporter|data_control'
 
 ## Known limitation: dragging out of the guest
 
-Dragging from the guest to the host is unreliable, with this patch and with
-upstream's X11 code alike (including on GNOME). When the pointer leaves
+Dragging from the guest to the host is unreliable, with these patches and
+with upstream's X11 code alike (including on GNOME). When the pointer leaves
 the VM window, the host releases the guest's mouse button straight away, but
 the host's "is a drag leaving?" message (`DND_CMD_QUERY_EXITING`) reaches
 `vmware-user` through an RPC channel it polls, backing off to 100ms when idle.
@@ -104,7 +122,7 @@ pgrep -af 'vmtoolsd -n vmusr'
 
 The module, only when `virtualisation.vmware.guest.enable` is set:
 
-- builds your nixpkgs' `open-vm-tools` with the patch, as
+- builds your nixpkgs' `open-vm-tools` with the patches, as
   `virtualisation.vmware.guest.package`;
 - turns the desktop parts on (`headless = false`), which NixOS otherwise only
   does when `services.xserver` is enabled;
@@ -122,15 +140,15 @@ the module.
 
 ## Other distributions
 
-The patch, `patches/open-vm-tools-wayland.patch`, is made against
-open-vm-tools' `stable-13.1.0` tag, relative to its `open-vm-tools/`
-directory. Apply it there, regenerate the build system, and configure with
-`--with-wayland` (which needs `wayland-client` and `wayland-scanner`):
+Apply the patches in `patches/`, in order, to open-vm-tools'
+`stable-13.1.0` tag from its `open-vm-tools/` directory, regenerate the
+build system, and configure with `--with-wayland` (which needs
+`wayland-client` and `wayland-scanner`):
 
 ```sh
 git clone --branch stable-13.1.0 https://github.com/vmware/open-vm-tools.git
 cd open-vm-tools/open-vm-tools
-patch -p1 < /path/to/open-vm-tools-wayland/patches/open-vm-tools-wayland.patch
+for p in /path/to/open-vm-tools-wayland/patches/*.patch; do patch -p1 < "$p"; done
 autoreconf -i
 ./configure --with-wayland
 make
@@ -151,29 +169,28 @@ protocol. With debug logging for `vmusr` enabled in `tools.conf`, the log
 says which backend was chosen (`native Wayland DnD`,
 `native Wayland copy/paste`).
 
-## Where the patch comes from
+## Where the patches come from
 
-The patch was developed as commits on the `wayland-dnd` branch of
-[northbymidwest/open-vm-tools](https://github.com/northbymidwest/open-vm-tools/tree/wayland-dnd),
-now archived, which has the history behind it. Changes are easiest to make
-the same way: commit them on top of the `stable-13.1.0` tag (or a newer
-release) in an open-vm-tools checkout, then regenerate the patch from the
-`open-vm-tools/` directory:
+The patches are commits on top of the `stable-13.1.0` tag in an
+open-vm-tools checkout, exported with:
 
 ```sh
-git diff --relative=open-vm-tools stable-13.1.0 HEAD > patches/open-vm-tools-wayland.patch
+git format-patch --relative=open-vm-tools --no-signature stable-13.1.0..HEAD -o patches
 ```
 
-keeping the description at the top of the file. The flake applies every
-`.patch` file in `patches/`, in name order.
+Each patch's description is its commit message. The flake applies every
+`.patch` file in `patches/`, in name order. The original development
+history is on the `wayland-dnd` branch of
+[northbymidwest/open-vm-tools](https://github.com/northbymidwest/open-vm-tools/tree/wayland-dnd),
+now archived.
 
 ## Licensing
 
 The packaging in this repository (the flake and the README) is 0BSD
-(SPDX-License-Identifier: 0BSD). The patch changes open-vm-tools and is
-under the licences of the files it changes: LGPL-2.1 for the `dndcp`
+(SPDX-License-Identifier: 0BSD). The patches change open-vm-tools and are
+under the licences of the files they change: LGPL-2.1 for the `dndcp`
 plugin's code, GPL-2.0 for its `Makefile.am`, and open-vm-tools' own licence
-for `configure.ac`. The Wayland protocol XML files it adds keep their own
+for `configure.ac`. The Wayland protocol XML files they add keep their own
 MIT-style licences.
 
 ## Related
